@@ -147,7 +147,7 @@ protected def Decoder.get_bytes (d : Decoder) (len : Nat) : Option (ByteArray ×
     some (d.data.extract start end', { d with offset := end' })
 
 @[inline]
-def get_bytes [Monad m] (len : Nat) : Get ByteArray := fun d =>
+def get_bytes (len : Nat) : Get ByteArray := fun d =>
   match d.get_bytes len with
   | none => DecodeResult.error "EOI" d
   | some (xs, k) => DecodeResult.success xs k
