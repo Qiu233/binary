@@ -13,69 +13,108 @@ structure Decoder where
   offset : Nat
 deriving Inhabited
 
+def Decoder.append (bytes : ByteArray) : Decoder → Decoder := fun d => {d with data := d.data.append bytes}
+
 instance : Repr ByteArray where
   reprPrec x _ := toString x
 
 deriving instance Repr for Decoder
 
 inductive DecodeResult (α) where
-  | success (x : α) (cont : Decoder)
+  | success (x : α) (k : Decoder)
   | error (err : String) (cur : Decoder)
+  | pending (fn : ByteArray → DecodeResult α)
 deriving Inhabited
 
 @[inline]
 instance : Functor DecodeResult where
-  map f
-    | .success x k => .success (f x) k
-    | .error err cur => .error err cur
+  map f t :=
+    let rec @[specialize] go t := match t with
+      | .success x k => .success (f x) k
+      | .error err cur => .error err cur
+      | .pending fn => .pending fun bytes => go <| fn bytes
+    go t
 
 def DecodeResult.toExcept : DecodeResult α → Except String α
   | .success x _ => .ok x
   | .error err _ => .error err
+  | .pending _ => .error "pending input"
 
 def Get (α : Type) : Type := Decoder → (DecodeResult α)
+
+-- @[inline]
+-- def Get.join {α} : Get (Get α) → Get α := fun xx d =>
+--   let rec @[specialize] go t :=
+--     match t with
+--     | .success x k => x k
+--     | .error err k => .error err k
+--     | .pending fn => .pending fun bytes => go <| fn bytes
+--   go (xx d)
+
+def DecodeResult.feed {α} (bytes : ByteArray) : DecodeResult α → DecodeResult α
+  | .success x k => .success x (k.append bytes)
+  | .error err k => .error err (k.append bytes)
+  | .pending fn => fn bytes
 
 @[inline]
 instance : Monad Get where
   pure x := fun d => DecodeResult.success x d
   bind mx xmy := fun d =>
-    let s := mx d
-    match s with
-    | .error err d => .error err d
-    | .success x cont => xmy x cont
+    let rec @[specialize] go s :=
+      match s with
+      | .error err d => .error err d
+      | .success x cont => xmy x cont
+      | .pending fn => .pending fun bytes =>
+        go <| fn bytes -- not yet complete, pending bytes prior to binding
+    go <| mx d
 
 @[inline]
 instance : Alternative Get where
   failure := fun d => DecodeResult.error "failure" d
-  orElse x y := fun d => match x d with
-  | r@(.success ..) => r
-  | .error .. => y () d -- backtracking
+  orElse x y := fun d =>
+    let rec @[specialize] go s :=
+      match s with
+      | r@(.success ..) => r
+      | .error .. => y () d -- backtracking
+      | .pending fn => .pending fun bytes =>
+        go <| fn bytes
+    go <| x d
 
 @[inline]
 instance : MonadExcept String Get where
   throw err := fun d => DecodeResult.error err d
   tryCatch body handler := fun d =>
-    let r := body d
-    match r with
-    | .success .. => r
-    | .error err _ => handler err d -- backtracking
+    let rec @[specialize] go s :=
+      match s with
+      | .success .. => s
+      | .error err _ => handler err d -- backtracking
+      | .pending fn => .pending fun bytes => go <| fn bytes
+    go <| body d
 
 /-- We decide to **backtrack** if the `try` block fails. -/
 @[inline]
 instance : MonadFinally Get where
   tryFinally' x f := fun d =>
-    let y := x d
-    match y with
-    | .success a k =>
-      let r := f (some a) k
-      match r with
-      | .success b k' => .success (a, b) k'
-      | .error err k' => .error err k'
-    | .error err _ =>
-      let r := f none d -- backtracking
-      match r with
-      | .success _ k' => .error err k' -- caught, we ignore the inner error
-      | .error err' k' => .error err' k' -- the finalizer throws an error
+    let rec go s :=
+      match s with
+      | .success a k =>
+        let r := f (some a) k
+        let rec go' r :=
+          match r with
+          | .success b k' => .success (a, b) k'
+          | .error err k' => .error err k'
+          | .pending fn => .pending fun bytes => go' <| fn bytes
+        go' r
+      | .error err _ =>
+        let r := f none d -- backtracking
+        let rec go'' r :=
+          match r with
+          | .success _ k' => .error err k' -- caught, we ignore the inner error
+          | .error err' k' => .error err' k' -- the finalizer throws an error
+          | .pending fn => .pending fun bytes => go'' <| fn bytes
+        go'' r
+      | .pending fn => .pending fun bytes => go <| fn bytes
+    go <| x d
 
 def Get.run (x : Get α) (bytes : ByteArray) : (DecodeResult α) := x {data := bytes, offset := 0}
 
@@ -87,10 +126,7 @@ class Decode (α : Type) where
   decode : Get α
 export Decode (decode)
 
-partial def DecodeResult.map (f : α → β) (x : DecodeResult α) : DecodeResult β :=
-  match x with
-  | .success x cont => .success (f x) cont
-  | .error err d => .error err d
+def DecodeResult.map (f : α → β) (x : DecodeResult α) : DecodeResult β := f <$> x
 
 abbrev Putter (α) := StateM ByteArray α
 abbrev Put := Putter Unit
@@ -112,6 +148,21 @@ def get_bytes [Monad m] (len : Nat) : Get ByteArray := fun d =>
   match d.get_bytes len with
   | none => DecodeResult.error "EOI" d
   | some (xs, k) => DecodeResult.success xs k
+
+/--
+Catch any `EOI` and recover to a pending state rather than exit with an error.
+
+**This function retry the whole `x` until no `EOI` is caught.** The caller should
+* ensure that `x` terminates when enough bytes are fed,
+* or define your own pending function to cache intermediate result as much as possible.
+-/
+@[specialize]
+partial def pending (x : Get α) : Get α := do
+  try x
+  catch err =>
+    match err with
+    | "EOI" => fun d => .pending fun bytes => pending x (d.append bytes)
+    | e => throw e
 
 namespace Primitive
 
@@ -145,6 +196,12 @@ structure A where
 structure Literal (α : Type) (a : α) where
   val : α
   h : val = a
+
+instance [Repr α] : Repr (Literal α a) where
+  reprPrec x := reprPrec x.val
+
+instance [ToString α] : ToString (Literal α a) where
+  toString x := toString x.val
 
 instance [Encode α] : Encode (Literal α a) where
   encode x := Encode.encode x.val
