@@ -8,7 +8,7 @@ instance : Decode UInt8 where
     if h : d.offset < d.data.size then
       DecodeResult.success (d.data.get d.offset) {d with offset := d.offset + 1}
     else
-      DecodeResult.eoi
+      DecodeResult.mkEOI d
 
 @[inline]
 instance : Decode Int8 where
@@ -16,7 +16,7 @@ instance : Decode Int8 where
     if h : d.offset < d.data.size then
       DecodeResult.success (d.data.get d.offset).toInt8 {d with offset := d.offset + 1}
     else
-      DecodeResult.eoi
+      DecodeResult.mkEOI d
 
 namespace Primitive
 
@@ -57,9 +57,9 @@ private def generate_prim (le : Bool) (unsigned : Bool) (type : Lean.TSyntax `id
         $(Lean.mkIdent `decode):ident $d:ident :=
           if h : $d_offset + $newSize:num < $d_data_size then
             let val := $combined
-            $(Lean.mkIdent `DecodeResult.success) val {$d with $(Lean.mkIdent `offset):ident := $d_offset + $(Lean.Syntax.mkNatLit len):num}
+            DecodeResult.success val {$d with offset := $d_offset + $(Lean.Syntax.mkNatLit len):num}
           else
-            $(Lean.mkIdent `DecodeResult.eoi)
+            DecodeResult.mkEOI d
       )
     return code
 

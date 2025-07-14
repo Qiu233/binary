@@ -21,69 +21,83 @@ deriving instance Repr for Decoder
 inductive DecodeResult (α) where
   | success (x : α) (cont : Decoder)
   | error (err : String) (cur : Decoder)
-  | eoi
 deriving Inhabited
+
+@[inline]
+instance : Functor DecodeResult where
+  map f
+    | .success x k => .success (f x) k
+    | .error err cur => .error err cur
 
 def DecodeResult.toExcept : DecodeResult α → Except String α
   | .success x _ => .ok x
   | .error err _ => .error err
-  | .eoi => .error "EOI"
 
--- TODO: make `ByteArray` immutable
-def GetT (m : Type → Type) (α : Type) : Type := Decoder → m (DecodeResult α)
+def Get (α : Type) : Type := Decoder → (DecodeResult α)
 
 @[inline]
-instance {m} [Monad m] : Monad (GetT m) where
-  pure x := fun d => pure (DecodeResult.success x d)
-  bind mx xmy := fun d => do
-    let s ← mx d
+instance : Monad Get where
+  pure x := fun d => DecodeResult.success x d
+  bind mx xmy := fun d =>
+    let s := mx d
     match s with
-    | .eoi => pure .eoi
-    | .error err d => pure <| .error err d
+    | .error err d => .error err d
     | .success x cont => xmy x cont
 
 @[inline]
-def GetT.failure [Applicative m] : GetT m α := fun d => pure (DecodeResult.eoi)
+instance : Alternative Get where
+  failure := fun d => DecodeResult.error "failure" d
+  orElse x y := fun d => match x d with
+  | r@(.success ..) => r
+  | .error .. => y () d -- backtracking
 
 @[inline]
-def GetT.orElse [Monad m] (x : GetT m α) (y : Unit → GetT m α) : GetT m α := fun d => do
-  match ← x d with
-  | r@(.success ..) => return r
-  | .eoi | .error .. => y () d
+instance : MonadExcept String Get where
+  throw err := fun d => DecodeResult.error err d
+  tryCatch body handler := fun d =>
+    let r := body d
+    match r with
+    | .success .. => r
+    | .error err _ => handler err d -- backtracking
 
+/-- We decide to **backtrack** if the `try` block fails. -/
 @[inline]
-instance [Monad m] : Alternative (GetT m) where
-  failure := GetT.failure
-  orElse := GetT.orElse
+instance : MonadFinally Get where
+  tryFinally' x f := fun d =>
+    let y := x d
+    match y with
+    | .success a k =>
+      let r := f (some a) k
+      match r with
+      | .success b k' => .success (a, b) k'
+      | .error err k' => .error err k'
+    | .error err _ =>
+      let r := f none d -- backtracking
+      match r with
+      | .success _ k' => .error err k' -- caught, we ignore the inner error
+      | .error err' k' => .error err' k' -- the finalizer throws an error
 
-def GetT.error [Monad m] : String → GetT m α := fun x d => pure (.error x d)
+def Get.run (x : Get α) (bytes : ByteArray) : (DecodeResult α) := x {data := bytes, offset := 0}
 
-def runGetT {m : Type → Type} [Monad m] (x : GetT m α) (bytes : ByteArray) : m (DecodeResult α) := do
-  x {data := bytes, offset := 0}
+protected def DecodeResult.mkEOI : Decoder → DecodeResult α := .error "EOI"
 
-abbrev Getter (α : Type) : Type := GetT Id α
-
-def Getter.error : String → Getter α := fun x d => .error x d
+def throwEOI : Get α := DecodeResult.mkEOI
 
 class Decode (α : Type) where
-  decode : Getter α
+  decode : Get α
 export Decode (decode)
 
 partial def DecodeResult.map (f : α → β) (x : DecodeResult α) : DecodeResult β :=
   match x with
   | .success x cont => .success (f x) cont
-  | .eoi => .eoi
   | .error err d => .error err d
 
-abbrev PutT (m : Type → Type) : Type → Type := StateT ByteArray m
-
-abbrev Put (m : Type → Type) := PutT m Unit
+abbrev Putter (α) := StateM ByteArray α
+abbrev Put := Putter Unit
 
 @[inline]
-def put_bytes {m} [Monad m] (bytes : ByteArray) : Put m := do
+def put_bytes (bytes : ByteArray) : Put := do
   modify fun s => s.append bytes
-
-private def get_decoder {ω m} [Monad m] [STWorld ω m] [MonadLiftT (ST ω) m] : GetT m Decoder := fun d => pure (DecodeResult.success d d)
 
 @[inline]
 protected def Decoder.get_bytes (d : Decoder) (len : Nat) : Option (ByteArray × Decoder) :=
@@ -94,10 +108,10 @@ protected def Decoder.get_bytes (d : Decoder) (len : Nat) : Option (ByteArray ×
     some (d.data.extract start end', { d with offset := end' })
 
 @[inline]
-def get_bytes [Monad m] (len : Nat) : GetT m ByteArray := fun d => do
+def get_bytes [Monad m] (len : Nat) : Get ByteArray := fun d =>
   match d.get_bytes len with
-  | none => return .eoi
-  | some (xs, cont) => return DecodeResult.success xs cont
+  | none => DecodeResult.error "EOI" d
+  | some (xs, k) => DecodeResult.success xs k
 
 namespace Primitive
 
@@ -141,6 +155,6 @@ instance [DecidableEq α] [Decode α] : Decode (Literal α a) where
     if h : v = a then
       return ⟨v, h⟩
     else
-      Getter.error "failed to decode literal"
+      throw "failed to decode literal"
 
 end Binary

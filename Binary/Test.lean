@@ -21,4 +21,4 @@ deriving Repr, Encode, Decode
 #eval encode (A.a 20)
 #eval encode (A.b)
 
-#eval runGetT (decode (α := A)) (encode (A.a 20)) |>.toExcept
+#eval Get.run (decode (α := A)) (encode (A.a 20)) |>.toExcept

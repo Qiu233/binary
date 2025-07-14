@@ -202,7 +202,7 @@ open Parser.Term in
 def mkDecodeBodyForInduct (ctx : Context) (indName : Name) (beInfo : BinEnumInfo) : TermElabM Term := do
   let indVal ← getConstInfoInduct indName
   let alts ← mkAlts indVal
-  let auxTerm ← alts.foldrM (fun xs x => `(Alternative.orElse $xs (fun _ => $x))) (← `(Getter.error ("unrecognized tag value encountered when trying to decode a constructor of type " ++ $(quote (indName.toString)))))
+  let auxTerm ← alts.foldrM (fun xs x => `(Alternative.orElse $xs (fun _ => $x))) (← `(throw ("unrecognized tag value encountered when trying to decode a constructor of type " ++ $(quote (indName.toString)))))
   `($auxTerm)
 where
   mkAlts (indVal : InductiveVal) : TermElabM (Array Term) := do
@@ -231,7 +231,7 @@ where
         let stx ←
           `(do
               if (← $(beInfo.decoder)) != $(quote repr) then
-                Getter.error ""
+                throw ""
               else
                 $[let $identNames:ident ← $decodes:doExpr]*
                 return $(mkIdent ctorName):ident $identNames*)
@@ -261,9 +261,9 @@ def mkDecodeAuxFunction (ctx : Context) (i : Nat) : TermElabM Command := do
   if ctx.usePartial then
     let letDecls ← mkLocalInstanceLetDecls ctx ``Decode header.argNames
     body ← mkLet letDecls body
-    `(private partial def $(mkIdent auxFunName):ident $binders:bracketedBinder* : Getter $(header.targetType) := $body:term)
+    `(private partial def $(mkIdent auxFunName):ident $binders:bracketedBinder* : Get $(header.targetType) := $body:term)
   else
-    `(private def $(mkIdent auxFunName):ident $binders:bracketedBinder* : Getter $(header.targetType) := $body:term)
+    `(private def $(mkIdent auxFunName):ident $binders:bracketedBinder* : Get $(header.targetType) := $body:term)
 
 def mkDecodeMutualBlock (ctx : Context) : TermElabM Command := do
   let mut auxDefs := #[]
