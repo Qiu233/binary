@@ -1,7 +1,7 @@
 import Lean
 import Binary.Basic
 
-namespace Binary
+namespace Binary.Deriving
 
 open Lean
 open Elab
