@@ -126,6 +126,8 @@ class Decode (α : Type) where
   decode : Get α
 export Decode (decode)
 
+def decodeThe (α : Type) [Decode α] : Get α := Decode.decode (α := α)
+
 def DecodeResult.map (f : α → β) (x : DecodeResult α) : DecodeResult β := f <$> x
 
 abbrev Putter (α) := StateM ByteArray α
