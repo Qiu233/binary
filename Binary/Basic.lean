@@ -133,9 +133,15 @@ def DecodeResult.map (f : α → β) (x : DecodeResult α) : DecodeResult β := 
 abbrev Putter (α) := StateM ByteArray α
 abbrev Put := Putter Unit
 
+def Put.run (capacity : Nat := 128) : Put → ByteArray := fun x =>
+  Prod.snd <$> x (ByteArray.emptyWithCapacity capacity)
+
 @[inline]
 def put_bytes (bytes : ByteArray) : Put := do
   modify fun s => s.append bytes
+
+@[inline]
+def put [Encode α] : α → Put := fun x => put_bytes (Encode.encode x)
 
 @[inline]
 protected def Decoder.get_bytes (d : Decoder) (len : Nat) : Option (ByteArray × Decoder) :=
