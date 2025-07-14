@@ -9,6 +9,9 @@ structure T where
   b : UInt64
 -- deriving Encode, Decode
 
+-- set_option trace.Elab.definition true
+-- set_option trace.Binary.Deriving.encode true
+
 deriving instance Encode for T
 deriving instance Decode for T
 
@@ -18,10 +21,10 @@ inductive A where
   | b
 deriving Repr, Encode, Decode
 
-#eval encode (A.a ⟨10, by simp⟩ 20)
-#eval encode (A.b)
+#eval (put (A.a ⟨10, by simp⟩ 20)).run
+#eval (put (A.b)).run
 
-#eval Get.run (decode (α := A)) (encode (A.a ⟨10, by simp⟩ 20)) |>.toExcept
+#eval Get.run (get (α := A)) (put (A.a ⟨10, by simp⟩ 20)).run |>.toExcept
 
 instance {α : Type} [ToString α] : ToString (DecodeResult α) where
   toString
@@ -29,7 +32,7 @@ instance {α : Type} [ToString α] : ToString (DecodeResult α) where
     | .error err _ => s!"error: {err}"
     | .pending _ => s!"pending"
 
-partial def get_byte' : Get UInt8 := pending (Decode.decode (α := UInt8))
+partial def get_byte' : Get UInt8 := pending (Decode.get (α := UInt8))
 
 -- this function caches partial input
 def p : Get UInt32 := do
@@ -53,7 +56,7 @@ def f : IO Unit := do
 
 -- this function retries completely
 def g : IO Unit := do
-  let t := Get.run (pending <| Decode.decode (α := UInt32)) ⟨#[2]⟩
+  let t := Get.run (pending <| Decode.get (α := UInt32)) ⟨#[2]⟩
   println! "{t}"
   let t := t.feed ⟨#[0]⟩
   println! "{t}"

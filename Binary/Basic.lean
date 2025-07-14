@@ -2,12 +2,6 @@ import Lean
 
 namespace Binary
 
-class Encode (α : Type) where
-  encode : α → ByteArray
-export Encode (encode)
-
-attribute [inline] Encode.encode -- TODO: has no effect?
-
 structure Decoder where
   data : ByteArray
   offset : Nat
@@ -123,15 +117,19 @@ protected def DecodeResult.mkEOI : Decoder → DecodeResult α := .error "EOI"
 def throwEOI : Get α := DecodeResult.mkEOI
 
 class Decode (α : Type) where
-  decode : Get α
-export Decode (decode)
+  get : Get α
+export Decode (get)
 
-def decodeThe (α : Type) [Decode α] : Get α := Decode.decode (α := α)
+def getThe (α : Type) [Decode α] : Get α := Decode.get (α := α)
 
 def DecodeResult.map (f : α → β) (x : DecodeResult α) : DecodeResult β := f <$> x
 
 abbrev Putter (α) := StateM ByteArray α
 abbrev Put := Putter Unit
+
+class Encode (α : Type) where
+  put : α → Put
+export Encode (put)
 
 def Put.run (capacity : Nat := 128) : Put → ByteArray := fun x =>
   Prod.snd <$> x (ByteArray.emptyWithCapacity capacity)
@@ -139,9 +137,6 @@ def Put.run (capacity : Nat := 128) : Put → ByteArray := fun x =>
 @[inline]
 def put_bytes (bytes : ByteArray) : Put := do
   modify fun s => s.append bytes
-
-@[inline]
-def put [Encode α] : α → Put := fun x => put_bytes (Encode.encode x)
 
 @[inline]
 protected def Decoder.get_bytes (d : Decoder) (len : Nat) : Option (ByteArray × Decoder) :=
@@ -188,7 +183,7 @@ def ByteArray.join : Array ByteArray → ByteArray := fun xss => Id.run do
 namespace Binary
 
 instance [Encode α] : Encode (Vector α n) where
-  encode x := ByteArray.join <| x.toArray.map Encode.encode
+  put x := x.toArray.forM Encode.put
 
 /--
 An auxiliary type to embed literal in complex structure.
@@ -212,11 +207,11 @@ instance [ToString α] : ToString (Literal α a) where
   toString x := toString x.val
 
 instance [Encode α] : Encode (Literal α a) where
-  encode x := Encode.encode x.val
+  put x := Encode.put x.val
 
 instance [DecidableEq α] [Decode α] : Decode (Literal α a) where
-  decode := do
-    let v ← Decode.decode (α := α)
+  get := do
+    let v ← Decode.get (α := α)
     if h : v = a then
       return ⟨v, h⟩
     else

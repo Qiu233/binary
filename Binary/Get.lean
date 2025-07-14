@@ -4,7 +4,7 @@ namespace Binary
 
 @[inline]
 instance : Decode UInt8 where
-  decode d :=
+  get d :=
     if h : d.offset < d.data.size then
       DecodeResult.success (d.data.get d.offset) {d with offset := d.offset + 1}
     else
@@ -12,7 +12,7 @@ instance : Decode UInt8 where
 
 @[inline]
 instance : Decode Int8 where
-  decode d :=
+  get d :=
     if h : d.offset < d.data.size then
       DecodeResult.success (d.data.get d.offset).toInt8 {d with offset := d.offset + 1}
     else
@@ -53,8 +53,8 @@ private def generate_prim (le : Bool) (unsigned : Bool) (type : Lean.TSyntax `id
         tail.foldlM (init := head) fun (x : Lean.Term) y => do
           `($x ||| $y)
     let code ← `(command|
-      scoped instance : $(Lean.mkIdent `Decode) $type where
-        $(Lean.mkIdent `decode):ident $d:ident :=
+      scoped instance : Decode $type where
+        get $d:ident :=
           if h : $d_offset + $newSize:num < $d_data_size then
             let val := $combined
             DecodeResult.success val {$d with offset := $d_offset + $(Lean.Syntax.mkNatLit len):num}
@@ -86,10 +86,10 @@ prim_signed_le Int32 4
 prim_signed_le Int64 8
 
 scoped instance : Decode Float32 where
-  decode d := decode (α := UInt32) d |>.map Float32.ofBits
+  get d := get (α := UInt32) d |>.map Float32.ofBits
 
 scoped instance : Decode Float where
-  decode d := decode (α := UInt64) d |>.map Float.ofBits
+  get d := get (α := UInt64) d |>.map Float.ofBits
 
 end LE
 
@@ -104,10 +104,10 @@ prim_signed_be Int32 4
 prim_signed_be Int64 8
 
 scoped instance : Decode Float32 where
-  decode d := decode (α := UInt32) d |>.map Float32.ofBits
+  get d := get (α := UInt32) d |>.map Float32.ofBits
 
 scoped instance : Decode Float where
-  decode d := decode (α := UInt64) d |>.map Float.ofBits
+  get d := get (α := UInt64) d |>.map Float.ofBits
 
 end BE
 

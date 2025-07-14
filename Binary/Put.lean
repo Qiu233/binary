@@ -4,11 +4,11 @@ namespace Binary
 
 @[inline]
 instance : Encode UInt8 where
-  encode x := ⟨#[x]⟩
+  put x := modify fun bs => bs.push x
 
 @[inline]
 instance : Encode Int8 where
-  encode x := encode x.toUInt8
+  put x := put x.toUInt8
 
 namespace Primitive
 
@@ -16,43 +16,39 @@ namespace LE
 
 @[inline]
 scoped instance : Encode UInt16 where
-  encode x := ⟨#[x.toUInt8, (x >>> 8).toUInt8]⟩
+  put x := put_bytes ⟨#[x.toUInt8, (x >>> 8).toUInt8]⟩
 
 @[inline]
 scoped instance : Encode Int16 where
-  encode x := encode x.toUInt16
+  put x := put x.toUInt16
 
 @[inline]
 scoped instance : Encode UInt32 where
-  encode x :=
-    let s : ByteArray := ByteArray.emptyWithCapacity 4
-    let s := s.append <| encode x.toUInt16
-    let s := s.append <| encode (x >>> 16).toUInt16
-    s
+  put x := do
+    put x.toUInt16
+    put (x >>> 16).toUInt16
 
 @[inline]
 scoped instance : Encode Int32 where
-  encode x := encode x.toUInt32
+  put x := put x.toUInt32
 
 @[inline]
 scoped instance : Encode UInt64 where
-  encode x :=
-    let s : ByteArray := ByteArray.emptyWithCapacity 8
-    let s := s.append <| encode x.toUInt32
-    let s := s.append <| encode (x >>> 32).toUInt32
-    s
+  put x := do
+    put x.toUInt32
+    put (x >>> 32).toUInt32
 
 @[inline]
 scoped instance : Encode Int64 where
-  encode x := encode x.toUInt64
+  put x := put x.toUInt64
 
 @[inline]
 scoped instance : Encode Float32 where
-  encode x := encode x.toBits
+  put x := put x.toBits
 
 @[inline]
 scoped instance : Encode Float where
-  encode x := encode x.toBits
+  put x := put x.toBits
 
 end LE
 
@@ -60,43 +56,39 @@ namespace BE
 
 @[inline]
 scoped instance : Encode UInt16 where
-  encode x := ⟨#[(x >>> 8).toUInt8, x.toUInt8]⟩
+  put x := put_bytes ⟨#[(x >>> 8).toUInt8, x.toUInt8]⟩
 
 @[inline]
 scoped instance : Encode Int16 where
-  encode x := encode x.toUInt16
+  put x := put x.toUInt16
 
 @[inline]
 scoped instance : Encode UInt32 where
-  encode x :=
-    let s : ByteArray := ByteArray.emptyWithCapacity 4
-    let s := s.append <| encode (x >>> 16).toUInt16
-    let s := s.append <| encode x.toUInt16
-    s
+  put x := do
+    put (x >>> 16).toUInt16
+    put x.toUInt16
 
 @[inline]
 scoped instance : Encode Int32 where
-  encode x := encode x.toUInt32
+  put x := put x.toUInt32
 
 @[inline]
 scoped instance : Encode UInt64 where
-  encode x :=
-    let s : ByteArray := ByteArray.emptyWithCapacity 8
-    let s := s.append <| encode (x >>> 32).toUInt32
-    let s := s.append <| encode x.toUInt32
-    s
+  put x := do
+    put (x >>> 32).toUInt32
+    put x.toUInt32
 
 @[inline]
 scoped instance : Encode Int64 where
-  encode x := encode x.toUInt64
+  put x := put x.toUInt64
 
 @[inline]
 scoped instance : Encode Float32 where
-  encode x := encode x.toBits
+  put x := put x.toBits
 
 @[inline]
 scoped instance : Encode Float where
-  encode x := encode x.toBits
+  put x := put x.toBits
 
 end BE
 

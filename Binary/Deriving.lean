@@ -28,16 +28,16 @@ private def generateInfo (declName : Name) (widthStx : TSyntax `num) (assignment
   if !(width matches 1 | 2 | 4 | 8) then
     throwErrorAt widthStx "only 1, 2, 4, 8 are allowed"
   let encoder : Term ← match width with
-    | 1 => `($(mkIdent `Encode.encode) ($(mkIdent `α) := $(mkIdent `UInt8)))
-    | 2 => `($(mkIdent `Encode.encode) ($(mkIdent `α) := $(mkIdent `UInt16)))
-    | 4 => `($(mkIdent `Encode.encode) ($(mkIdent `α) := $(mkIdent `UInt32)))
-    | 8 => `($(mkIdent `Encode.encode) ($(mkIdent `α) := $(mkIdent `UInt64)))
+    | 1 => `($(mkIdent `Encode.put) ($(mkIdent `α) := $(mkIdent `UInt8)))
+    | 2 => `($(mkIdent `Encode.put) ($(mkIdent `α) := $(mkIdent `UInt16)))
+    | 4 => `($(mkIdent `Encode.put) ($(mkIdent `α) := $(mkIdent `UInt32)))
+    | 8 => `($(mkIdent `Encode.put) ($(mkIdent `α) := $(mkIdent `UInt64)))
     | _ => unreachable!
   let decoder : Term ← match width with
-    | 1 => `($(mkIdent `Decode.decode) ($(mkIdent `α) := $(mkIdent `UInt8)))
-    | 2 => `($(mkIdent `Decode.decode) ($(mkIdent `α) := $(mkIdent `UInt16)))
-    | 4 => `($(mkIdent `Decode.decode) ($(mkIdent `α) := $(mkIdent `UInt32)))
-    | 8 => `($(mkIdent `Decode.decode) ($(mkIdent `α) := $(mkIdent `UInt64)))
+    | 1 => `($(mkIdent `Decode.get) ($(mkIdent `α) := $(mkIdent `UInt8)))
+    | 2 => `($(mkIdent `Decode.get) ($(mkIdent `α) := $(mkIdent `UInt16)))
+    | 4 => `($(mkIdent `Decode.get) ($(mkIdent `α) := $(mkIdent `UInt32)))
+    | 8 => `($(mkIdent `Decode.get) ($(mkIdent `α) := $(mkIdent `UInt64)))
     | _ => unreachable!
   let info ← getConstInfo declName
   let .inductInfo info := info | throwError m!"the type {declName} is not an inductive type"
@@ -80,21 +80,21 @@ def aggregateStructFields (header : Header) (indName : Name) : TermElabM Term :=
   let fields := getStructureFieldsFlattened (← getEnv) indName (includeSubobjectFields := false)
   let fields ← fields.mapM fun field => do
     let target := mkIdent header.targetNames[0]!
-    `(Encode.encode ($target).$(mkIdent field))
-  `(ByteArray.join <| #[$fields,*])
+    `(Parser.Term.doSeqItem| Encode.put ($target).$(mkIdent field))
+  `(do $fields*)
 
 open Parser.Term in
 def mkEncodeBodyForInduct (ctx : Context) (header : Header) (indName : Name) (beInfo : BinEnumInfo) : TermElabM Term := do
   let indVal ← getConstInfoInduct indName
   let encodeFuncId := mkIdent ctx.auxFunNames[0]!
-  let mkEncode (id : Ident) (type : Expr) : TermElabM Term := do
-        if type.isAppOf indVal.name then `($encodeFuncId:ident $id:ident)
-        else ``(Encode.encode $id:ident)
+  let mkEncode (id : Ident) (type : Expr) : TermElabM _ := do
+        if type.isAppOf indVal.name then `(doSeqItem| $encodeFuncId:ident $id:ident)
+        else `(doSeqItem| Encode.put $id:ident)
   let discrs ← mkDiscrs header indVal
   let alts ← mkAlts indVal beInfo.assignment? fun ctor args repr => do
-    let tag ← `($beInfo.encoder $(quote repr))
+    let tag ← `(doSeqItem| $(beInfo.encoder):term $(quote repr))
     let ts ← args.mapM fun (id, type) => mkEncode id type
-    `(ByteArray.join <| #[$tag, $ts,*])
+    `(do $tag $ts*)
   `(match $[$discrs],* with $alts:matchAlt*)
 where
   mkAlts
@@ -153,9 +153,9 @@ def mkEncodeAuxFunction (ctx : Context) (i : Nat) : TermElabM Command := do
   if ctx.usePartial then
     let letDecls ← mkLocalInstanceLetDecls ctx ``Encode header.argNames
     body ← mkLet letDecls body
-    `(private partial def $(mkIdent auxFunName):ident $binders:bracketedBinder* : ByteArray := $body:term)
+    `(private partial def $(mkIdent auxFunName):ident $binders:bracketedBinder* : Put := $body:term)
   else
-    `(private def $(mkIdent auxFunName):ident $binders:bracketedBinder* : ByteArray := $body:term)
+    `(private def $(mkIdent auxFunName):ident $binders:bracketedBinder* : Put := $body:term)
 
 def mkEncodeMutualBlock (ctx : Context) : TermElabM Command := do
   let mut auxDefs := #[]
@@ -189,7 +189,7 @@ def decodeStructFields (indName : Name) : TermElabM Term := do
   let fields := getStructureFieldsFlattened (← getEnv) indName (includeSubobjectFields := false)
   let fields ← fields.mapM fun field => do
     let var := mkIdent field
-    let init ← `(Parser.Term.doSeqItem| let $var:ident ← Decode.decode)
+    let init ← `(Parser.Term.doSeqItem| let $var:ident ← Decode.get)
     let field ← `(Parser.Term.structInstField| $(mkIdent field):ident := $var)
     pure (init, field)
   let (inits, fields) := fields.unzip
@@ -224,7 +224,7 @@ where
         let decodeFuncId := mkIdent ctx.auxFunNames[0]!
         let mkDecode (type : Expr) : TermElabM (TSyntax ``doExpr) :=
           if type.isAppOf indVal.name then `(Lean.Parser.Term.doExpr| $decodeFuncId:ident)
-          else `(Lean.Parser.Term.doExpr| Decode.decode)
+          else `(Lean.Parser.Term.doExpr| Decode.get)
         let identNames := binders.map Prod.fst
         let decodes ← binders.mapM fun (_, type) => mkDecode type
         let repr := assignment[ctorIdx]!
