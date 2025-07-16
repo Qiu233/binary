@@ -9,11 +9,6 @@ deriving Inhabited
 
 def Decoder.append (bytes : ByteArray) : Decoder → Decoder := fun d => {d with data := d.data.append bytes}
 
-instance : Repr ByteArray where
-  reprPrec x _ := toString x
-
-deriving instance Repr for Decoder
-
 inductive DecodeResult (α) where
   | success (x : α) (k : Decoder)
   | error (err : String) (cur : Decoder)
