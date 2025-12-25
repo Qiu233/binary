@@ -144,7 +144,7 @@ protected def Decoder.get_bytes (d : Decoder) (len : Nat) : Option (ByteArray ×
 @[inline]
 def get_bytes (len : Nat) : Get ByteArray := fun d =>
   match d.get_bytes len with
-  | none => DecodeResult.error "EOI" d
+  | none => DecodeResult.mkEOI d
   | some (xs, k) => DecodeResult.success xs k
 
 /--
