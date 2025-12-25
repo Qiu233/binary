@@ -166,7 +166,7 @@ def mkEncodeMutualBlock (ctx : Context) : TermElabM Command := do
     end)
 
 private def mkEncodeInstance (declName : Name) : TermElabM (Array Command) := do
-  let ctx ← mkContext "encode" declName
+  let ctx ← mkContext ``Encode "encode" declName
   let cmds := #[← mkEncodeMutualBlock ctx] ++ (← mkInstanceCmds ctx ``Encode #[declName])
   trace[Binary.Deriving.encode] "\n{cmds}"
   return cmds
@@ -274,7 +274,7 @@ def mkDecodeMutualBlock (ctx : Context) : TermElabM Command := do
     end)
 
 private def mkDecodeInstance (declName : Name) : TermElabM (Array Command) := do
-  let ctx ← mkContext "decode" declName
+  let ctx ← mkContext ``Decode "decode" declName
   let cmds := #[← mkDecodeMutualBlock ctx] ++ (← mkInstanceCmds ctx ``Decode #[declName])
   trace[Binary.Deriving.decode] "\n{cmds}"
   return cmds
