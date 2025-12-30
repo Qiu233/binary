@@ -1,6 +1,7 @@
 import Binary.Deriving
 import Binary.Put
 import Binary.Get
+import Binary.Hex
 
 open Binary Primitive LE
 
@@ -66,3 +67,5 @@ def g : IO Unit := do
   println! "{t}"
 
 #eval g
+
+#eval hex!"1122ABCD"
