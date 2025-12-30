@@ -42,6 +42,7 @@ def DecodeResult.toExcept : DecodeResult α → Except DecodeError α
   | .error err _ => .error err
   | .pending _ => .error (.userError "pending input")
 
+@[expose]
 abbrev Get (α : Type) : Type := Decoder → (DecodeResult α)
 
 @[always_inline]
@@ -131,7 +132,9 @@ def getThe (α : Type) [Decode α] : Get α := Decode.get (α := α)
 @[specialize]
 def DecodeResult.map (f : α → β) (x : DecodeResult α) : DecodeResult β := f <$> x
 
+@[expose]
 abbrev Putter (α) := StateM ByteArray α
+@[expose]
 abbrev Put := Putter Unit
 
 class Encode (α : Type) where

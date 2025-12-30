@@ -1,5 +1,6 @@
 import Binary
 import Binary.Hex
+import Binary.GetProc
 
 open Binary Primitive LE
 
@@ -63,5 +64,15 @@ def g : IO Unit := do
 #eval g
 
 #eval hex!"1122ABCD"
+
+def t : Get (UInt32 × ByteArray) := do
+  get! {
+      x : UInt32,
+      hex "ABCD",
+      0x12 : UInt16,
+      len : UInt32,
+      data : bytes len.toNat,
+      yield (x, data),
+    }
 
 def main : IO Unit := pure ()

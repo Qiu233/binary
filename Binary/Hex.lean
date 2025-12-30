@@ -83,10 +83,7 @@ where getC (c : Char) : UInt8 :=
 
 syntax (name := hexStrStx) "hex!" hexStr : term
 
-@[term_elab hexStrStx]
-public meta def elabHexStrStx : TermElab := fun hex _ => do
-  let str := hex[1][0][0]
-  let str := str.getAtomVal.trim
+public def elabHexStr : String → MetaM (Array UInt8) := fun str => do
   assert! str.front == '\"'
   assert! str.back == '\"'
   let content := str.toList.extract 1 (str.length - 1)
@@ -94,7 +91,13 @@ public meta def elabHexStrStx : TermElab := fun hex _ => do
   if content.length % 2 != 0 then
     throwError "hex characters must be of even length, consider adding padding zeros"
   let paired := List.range (content.length / 2) |>.map fun i => (content[i * 2]!, content[i * 2 + 1]!)
-  let data := convert_hex paired
+  return convert_hex paired
+
+@[term_elab hexStrStx]
+public def elabHexStrStx : TermElab := fun hex _ => do
+  let str := hex[1][0][0]
+  let str := str.getAtomVal.trim
+  let data ← elabHexStr str
   let ts ← data.mapM fun x => `($(quote x.toNat):num)
   let arr ← `(ByteArray.mk #[ $ts,* ])
   withMacroExpansion hex arr do
