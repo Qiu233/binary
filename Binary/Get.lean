@@ -7,7 +7,7 @@ namespace Binary
 
 public section
 
-@[inline]
+@[always_inline]
 instance : Decode UInt8 where
   get d :=
     if h : d.offset < d.data.size then
@@ -15,7 +15,7 @@ instance : Decode UInt8 where
     else
       DecodeResult.mkEOI d
 
-@[inline]
+@[always_inline]
 instance : Decode Int8 where
   get d :=
     if h : d.offset < d.data.size then
@@ -60,6 +60,7 @@ private meta def generate_prim (le : Bool) (unsigned : Bool) (type : Lean.TSynta
         tail.foldlM (init := head) fun (x : Lean.Term) y => do
           `($x ||| $y)
     let code ← `(command|
+      @[always_inline]
       scoped instance : Decode $type where
         get $d:ident :=
           if h : $d_offset + $newSize:num < $d_data_size then
@@ -93,9 +94,11 @@ prim_signed_le Int16 2
 prim_signed_le Int32 4
 prim_signed_le Int64 8
 
+@[always_inline]
 scoped instance : Decode Float32 where
   get d := get (α := UInt32) d |>.map Float32.ofBits
 
+@[always_inline]
 scoped instance : Decode Float where
   get d := get (α := UInt64) d |>.map Float.ofBits
 
@@ -111,9 +114,11 @@ prim_signed_be Int16 2
 prim_signed_be Int32 4
 prim_signed_be Int64 8
 
+@[always_inline]
 scoped instance : Decode Float32 where
   get d := get (α := UInt32) d |>.map Float32.ofBits
 
+@[always_inline]
 scoped instance : Decode Float where
   get d := get (α := UInt64) d |>.map Float.ofBits
 

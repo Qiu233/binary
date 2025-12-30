@@ -1,7 +1,6 @@
 module
 
 public meta import Lean
-public import Lean.Attributes
 import Binary.Basic
 
 public meta section
@@ -96,7 +95,7 @@ def mkEncodeBodyForInduct (ctx : Context) (header : Header) (indName : Name) (be
         if type.isAppOf indVal.name then `(doSeqItem| $encodeFuncId:ident $id:ident)
         else `(doSeqItem| Encode.put $id:ident)
   let discrs ← mkDiscrs header indVal
-  let alts ← mkAlts indVal beInfo.assignment? fun ctor args repr => do
+  let alts ← mkAlts indVal beInfo.assignment? fun _ args repr => do
     let tag ← `(doSeqItem| $(beInfo.encoder):term $(quote repr))
     let ts ← args.mapM fun (id, type) => mkEncode id type
     `(do $tag $ts*)

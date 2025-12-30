@@ -4,14 +4,14 @@ public section
 
 namespace Binary
 
-public structure Decoder where
+structure Decoder where
   data : ByteArray
   offset : Nat
 deriving Inhabited
 
-def Decoder.append (bytes : ByteArray) : Decoder → Decoder := fun d => {d with data := d.data.append bytes}
+private def Decoder.append (bytes : ByteArray) : Decoder → Decoder := fun d => {d with data := d.data.append bytes}
 
-public inductive DecodeError where
+inductive DecodeError where
   | userError (err : String)
   | eoi
 deriving Inhabited, Repr
@@ -27,15 +27,16 @@ inductive DecodeResult (α) where
   | pending (fn : ByteArray → DecodeResult α)
 deriving Inhabited
 
-@[inline]
+@[always_inline]
 instance : Functor DecodeResult where
   map f t :=
-    let rec @[specialize] go t := match t with
+    let rec go t := match t with
       | .success x k => .success (f x) k
       | .error err cur => .error err cur
       | .pending fn => .pending fun bytes => go <| fn bytes
     go t
 
+@[always_inline]
 def DecodeResult.toExcept : DecodeResult α → Except DecodeError α
   | .success x _ => .ok x
   | .error err _ => .error err
@@ -43,25 +44,17 @@ def DecodeResult.toExcept : DecodeResult α → Except DecodeError α
 
 abbrev Get (α : Type) : Type := Decoder → (DecodeResult α)
 
--- @[inline]
--- def Get.join {α} : Get (Get α) → Get α := fun xx d =>
---   let rec @[specialize] go t :=
---     match t with
---     | .success x k => x k
---     | .error err k => .error err k
---     | .pending fn => .pending fun bytes => go <| fn bytes
---   go (xx d)
-
+@[always_inline]
 def DecodeResult.feed {α} (bytes : ByteArray) : DecodeResult α → DecodeResult α
   | .success x k => .success x (k.append bytes)
   | .error err k => .error err (k.append bytes)
   | .pending fn => fn bytes
 
-@[inline]
+@[always_inline]
 instance : Monad Get where
   pure x := fun d => DecodeResult.success x d
   bind mx xmy := fun d =>
-    let rec @[specialize] go s :=
+    let rec go s :=
       match s with
       | .error err d => .error err d
       | .success x cont => xmy x cont
@@ -69,11 +62,11 @@ instance : Monad Get where
         go <| fn bytes -- not yet complete, pending bytes prior to binding
     go <| mx d
 
-@[inline]
+@[always_inline]
 instance : Alternative Get where
   failure := fun d => DecodeResult.error (.userError "failure") d
   orElse x y := fun d =>
-    let rec @[specialize] go s :=
+    let rec go s :=
       match s with
       | r@(.success ..) => r
       | .error .. => y () d -- backtracking
@@ -81,11 +74,11 @@ instance : Alternative Get where
         go <| fn bytes
     go <| x d
 
-@[inline]
+@[always_inline]
 instance : MonadExcept DecodeError Get where
   throw err := fun d => DecodeResult.error err d
   tryCatch body handler := fun d =>
-    let rec @[specialize] go s :=
+    let rec go s :=
       match s with
       | .success .. => s
       | .error err _ => handler err d -- backtracking
@@ -93,7 +86,7 @@ instance : MonadExcept DecodeError Get where
     go <| body d
 
 /-- We decide to **backtrack** if the `try` block fails. -/
-@[inline]
+@[always_inline]
 instance : MonadFinally Get where
   tryFinally' x f := fun d =>
     let rec go s :=
@@ -117,10 +110,13 @@ instance : MonadFinally Get where
       | .pending fn => .pending fun bytes => go <| fn bytes
     go <| x d
 
+@[always_inline]
 def Get.run (x : Get α) (bytes : ByteArray) : (DecodeResult α) := x {data := bytes, offset := 0}
 
+@[always_inline]
 protected def DecodeResult.mkEOI : Decoder → DecodeResult α := .error .eoi
 
+@[always_inline]
 def throwEOI : Get α := DecodeResult.mkEOI
 
 class Decode (α : Type) where
@@ -144,14 +140,15 @@ export Encode (put)
 
 attribute [specialize] Encode.put
 
+@[always_inline]
 def Put.run (capacity : Nat := 128) : Put → ByteArray := fun x =>
   Prod.snd <$> x (ByteArray.emptyWithCapacity capacity)
 
-@[inline]
+@[always_inline]
 def put_bytes (bytes : ByteArray) : Put := do
   modify fun s => s.append bytes
 
-@[inline]
+@[always_inline]
 protected def Decoder.get_bytes (d : Decoder) (len : Nat) : Option (ByteArray × Decoder) :=
   let start := d.offset
   let end' := start + len
@@ -159,7 +156,7 @@ protected def Decoder.get_bytes (d : Decoder) (len : Nat) : Option (ByteArray ×
   else
     some (d.data.extract start end', { d with offset := end' })
 
-@[inline]
+@[always_inline]
 def get_bytes (len : Nat) : Get ByteArray := fun d =>
   match d.get_bytes len with
   | none => DecodeResult.mkEOI d
@@ -172,7 +169,7 @@ Catch any `DecodeError.eoi` and recover to a pending state rather than exit with
 * ensure that `x` terminates when enough bytes are fed,
 * or define your own pending function to cache intermediate result as much as possible.
 -/
-@[always_inline]
+@[specialize, always_inline]
 partial def pending (x : Get α) : Get α := do
   try x
   catch err =>
@@ -186,15 +183,17 @@ end Primitive
 
 end Binary
 
-private def ByteArray.join : Array ByteArray → ByteArray := fun xss => Id.run do
-  let length := xss.foldl (init := 0) fun x y => x + y.size
-  let mut arr := ByteArray.emptyWithCapacity length
-  for xs in xss do
-    arr := arr.append xs
-  return arr
+-- @[always_inline]
+-- private def ByteArray.join : Array ByteArray → ByteArray := fun xss => Id.run do
+--   let length := xss.foldl (init := 0) fun x y => x + y.size
+--   let mut arr := ByteArray.emptyWithCapacity length
+--   for xs in xss do
+--     arr := arr.append xs
+--   return arr
 
 namespace Binary
 
+@[specialize, always_inline]
 instance [Encode α] : Encode (Vector α n) where
   put x := x.toArray.forM Encode.put
 
@@ -219,11 +218,11 @@ instance [Repr α] : Repr (Literal α a) where
 instance [ToString α] : ToString (Literal α a) where
   toString x := toString x.val
 
-@[specialize]
+@[specialize, always_inline]
 instance [Encode α] : Encode (Literal α a) where
   put x := Encode.put x.val
 
-@[specialize]
+@[specialize, always_inline]
 instance [DecidableEq α] [Decode α] : Decode (Literal α a) where
   get := do
     let v ← Decode.get (α := α)

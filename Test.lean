@@ -1,20 +1,14 @@
-import Binary.Deriving
-import Binary.Put
-import Binary.Get
+import Binary
 import Binary.Hex
 
 open Binary Primitive LE
 
+-- set_option trace.Elab.definition true
+
 structure T where
   a : Int32
   b : UInt64
--- deriving Encode, Decode
-
--- set_option trace.Elab.definition true
--- set_option trace.Binary.Deriving.encode true
-
-deriving instance Encode for T
-deriving instance Decode for T
+deriving Encode, Decode
 
 @[bin_enum 4 [0, 1]]
 inductive A where
@@ -69,3 +63,5 @@ def g : IO Unit := do
 #eval g
 
 #eval hex!"1122ABCD"
+
+def main : IO Unit := pure ()

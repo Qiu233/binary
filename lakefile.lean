@@ -6,3 +6,6 @@ package "binary" where
   leanOptions := #[ ⟨`experimental.module, true⟩ ]
 
 lean_lib Binary where
+
+lean_exe Test where
+  root := `Test
