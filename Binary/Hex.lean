@@ -81,7 +81,7 @@ where getC (c : Char) : UInt8 :=
   else if ('a' ≤ c && c ≤ 'f') then (c.val - 'a'.val + 10).toUInt8
   else unreachable!
 
-syntax (name := hexStrStx) "hex!" hexStr : term
+syntax:max (name := hexStrStx) "hex!" hexStr : term
 
 @[term_elab hexStrStx]
 public meta def elabHexStrStx : TermElab := fun hex _ => do
