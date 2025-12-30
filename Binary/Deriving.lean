@@ -28,16 +28,16 @@ private def generateInfo (declName : Name) (widthStx : TSyntax `num) (assignment
   if !(width matches 1 | 2 | 4 | 8) then
     throwErrorAt widthStx "only 1, 2, 4, 8 are allowed"
   let encoder : Term ← match width with
-    | 1 => `($(mkIdent `Encode.put) ($(mkIdent `α) := $(mkIdent `UInt8)))
-    | 2 => `($(mkIdent `Encode.put) ($(mkIdent `α) := $(mkIdent `UInt16)))
-    | 4 => `($(mkIdent `Encode.put) ($(mkIdent `α) := $(mkIdent `UInt32)))
-    | 8 => `($(mkIdent `Encode.put) ($(mkIdent `α) := $(mkIdent `UInt64)))
+    | 1 => `($(mkIdent ``Encode.put) ($(mkIdent `α) := $(mkIdent ``UInt8)))
+    | 2 => `($(mkIdent ``Encode.put) ($(mkIdent `α) := $(mkIdent ``UInt16)))
+    | 4 => `($(mkIdent ``Encode.put) ($(mkIdent `α) := $(mkIdent ``UInt32)))
+    | 8 => `($(mkIdent ``Encode.put) ($(mkIdent `α) := $(mkIdent ``UInt64)))
     | _ => unreachable!
   let decoder : Term ← match width with
-    | 1 => `($(mkIdent `Decode.get) ($(mkIdent `α) := $(mkIdent `UInt8)))
-    | 2 => `($(mkIdent `Decode.get) ($(mkIdent `α) := $(mkIdent `UInt16)))
-    | 4 => `($(mkIdent `Decode.get) ($(mkIdent `α) := $(mkIdent `UInt32)))
-    | 8 => `($(mkIdent `Decode.get) ($(mkIdent `α) := $(mkIdent `UInt64)))
+    | 1 => `($(mkIdent ``Decode.get) ($(mkIdent `α) := $(mkIdent ``UInt8)))
+    | 2 => `($(mkIdent ``Decode.get) ($(mkIdent `α) := $(mkIdent ``UInt16)))
+    | 4 => `($(mkIdent ``Decode.get) ($(mkIdent `α) := $(mkIdent ``UInt32)))
+    | 8 => `($(mkIdent ``Decode.get) ($(mkIdent `α) := $(mkIdent ``UInt64)))
     | _ => unreachable!
   let info ← getConstInfo declName
   let .inductInfo info := info | throwError m!"the type {declName} is not an inductive type"
@@ -202,7 +202,9 @@ open Parser.Term in
 def mkDecodeBodyForInduct (ctx : Context) (indName : Name) (beInfo : BinEnumInfo) : TermElabM Term := do
   let indVal ← getConstInfoInduct indName
   let alts ← mkAlts indVal
-  let auxTerm ← alts.foldrM (fun xs x => `(Alternative.orElse $xs (fun _ => $x))) (← `(throw ("unrecognized tag value encountered when trying to decode a constructor of type " ++ $(quote (indName.toString)))))
+  let auxTerm ← alts.foldrM
+    (fun xs x => ``(Alternative.orElse $xs (fun _ => $x)))
+    (← ``(throw (DecodeError.userError s!"unrecognized tag value encountered when trying to decode a constructor of type: {$(quote indName.toString)}")))
   `($auxTerm)
 where
   mkAlts (indVal : InductiveVal) : TermElabM (Array Term) := do
@@ -231,7 +233,7 @@ where
         let stx ←
           `(do
               if (← $(beInfo.decoder)) != $(quote repr) then
-                throw ""
+                throw (DecodeError.userError "")
               else
                 $[let $identNames:ident ← $decodes:doExpr]*
                 return $(mkIdent ctorName):ident $identNames*)

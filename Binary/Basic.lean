@@ -9,9 +9,19 @@ deriving Inhabited
 
 def Decoder.append (bytes : ByteArray) : Decoder → Decoder := fun d => {d with data := d.data.append bytes}
 
+inductive DecodeError where
+  | userError (err : String)
+  | eoi
+deriving Inhabited, Repr
+
+instance : ToString DecodeError where
+  toString
+    | .userError e => e
+    | .eoi => "EOI"
+
 inductive DecodeResult (α) where
   | success (x : α) (k : Decoder)
-  | error (err : String) (cur : Decoder)
+  | error (err : DecodeError) (cur : Decoder)
   | pending (fn : ByteArray → DecodeResult α)
 deriving Inhabited
 
@@ -24,10 +34,10 @@ instance : Functor DecodeResult where
       | .pending fn => .pending fun bytes => go <| fn bytes
     go t
 
-def DecodeResult.toExcept : DecodeResult α → Except String α
+def DecodeResult.toExcept : DecodeResult α → Except DecodeError α
   | .success x _ => .ok x
   | .error err _ => .error err
-  | .pending _ => .error "pending input"
+  | .pending _ => .error (.userError "pending input")
 
 def Get (α : Type) : Type := Decoder → (DecodeResult α)
 
@@ -59,7 +69,7 @@ instance : Monad Get where
 
 @[inline]
 instance : Alternative Get where
-  failure := fun d => DecodeResult.error "failure" d
+  failure := fun d => DecodeResult.error (.userError "failure") d
   orElse x y := fun d =>
     let rec @[specialize] go s :=
       match s with
@@ -70,7 +80,7 @@ instance : Alternative Get where
     go <| x d
 
 @[inline]
-instance : MonadExcept String Get where
+instance : MonadExcept DecodeError Get where
   throw err := fun d => DecodeResult.error err d
   tryCatch body handler := fun d =>
     let rec @[specialize] go s :=
@@ -107,7 +117,7 @@ instance : MonadFinally Get where
 
 def Get.run (x : Get α) (bytes : ByteArray) : (DecodeResult α) := x {data := bytes, offset := 0}
 
-protected def DecodeResult.mkEOI : Decoder → DecodeResult α := .error "EOI"
+protected def DecodeResult.mkEOI : Decoder → DecodeResult α := .error .eoi
 
 def throwEOI : Get α := DecodeResult.mkEOI
 
@@ -115,8 +125,12 @@ class Decode (α : Type) where
   get : Get α
 export Decode (get)
 
+attribute [specialize] Decode.get
+
+@[always_inline]
 def getThe (α : Type) [Decode α] : Get α := Decode.get (α := α)
 
+@[specialize]
 def DecodeResult.map (f : α → β) (x : DecodeResult α) : DecodeResult β := f <$> x
 
 abbrev Putter (α) := StateM ByteArray α
@@ -125,6 +139,8 @@ abbrev Put := Putter Unit
 class Encode (α : Type) where
   put : α → Put
 export Encode (put)
+
+attribute [specialize] Encode.put
 
 def Put.run (capacity : Nat := 128) : Put → ByteArray := fun x =>
   Prod.snd <$> x (ByteArray.emptyWithCapacity capacity)
@@ -148,18 +164,18 @@ def get_bytes (len : Nat) : Get ByteArray := fun d =>
   | some (xs, k) => DecodeResult.success xs k
 
 /--
-Catch any `EOI` and recover to a pending state rather than exit with an error.
+Catch any `DecodeError.eoi` and recover to a pending state rather than exit with an error.
 
-**This function retry the whole `x` until no `EOI` is caught.** The caller should
+**This function retry the whole `x` until no `DecodeError.eoi` is caught.** The caller should
 * ensure that `x` terminates when enough bytes are fed,
 * or define your own pending function to cache intermediate result as much as possible.
 -/
-@[specialize]
+@[always_inline]
 partial def pending (x : Get α) : Get α := do
   try x
   catch err =>
     match err with
-    | "EOI" => fun d => .pending fun bytes => pending x (d.append bytes)
+    | .eoi => fun d => .pending fun bytes => pending x (d.append bytes)
     | e => throw e
 
 namespace Primitive
@@ -168,7 +184,7 @@ end Primitive
 
 end Binary
 
-def ByteArray.join : Array ByteArray → ByteArray := fun xss => Id.run do
+private def ByteArray.join : Array ByteArray → ByteArray := fun xss => Id.run do
   let length := xss.foldl (init := 0) fun x y => x + y.size
   let mut arr := ByteArray.emptyWithCapacity length
   for xs in xss do
@@ -210,6 +226,6 @@ instance [DecidableEq α] [Decode α] : Decode (Literal α a) where
     if h : v = a then
       return ⟨v, h⟩
     else
-      throw "failed to decode literal"
+      throw (.userError "failed to decode literal")
 
 end Binary
