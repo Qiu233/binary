@@ -1,4 +1,8 @@
-import Binary.Basic
+module
+
+public import Binary.Basic
+
+public section
 
 namespace Binary
 

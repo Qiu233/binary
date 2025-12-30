@@ -1,5 +1,10 @@
-import Lean
+module
+
+public meta import Lean
+public import Lean.Attributes
 import Binary.Basic
+
+public meta section
 
 namespace Binary.Deriving
 

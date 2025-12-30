@@ -1,6 +1,11 @@
-import Binary.Basic
+module
+
+public import Binary.Basic
+meta import Lean
 
 namespace Binary
+
+public section
 
 @[inline]
 instance : Decode UInt8 where
@@ -18,11 +23,13 @@ instance : Decode Int8 where
     else
       DecodeResult.mkEOI d
 
+end
+
 namespace Primitive
 
 variable {ω m} [Monad m] [STWorld ω m] [MonadLiftT (ST ω) m]
 
-private def generate_prim (le : Bool) (unsigned : Bool) (type : Lean.TSyntax `ident) (size : Lean.TSyntax `num) : Lean.MacroM Lean.Command := do
+private meta def generate_prim (le : Bool) (unsigned : Bool) (type : Lean.TSyntax `ident) (size : Lean.TSyntax `num) : Lean.MacroM Lean.Command := do
   let len := size.getNat
     if len = 0 then
       Lean.Macro.throwErrorAt size "size cannot be 0"
@@ -68,12 +75,13 @@ local syntax "prim_unsigned_be " ident num : command
 local syntax "prim_signed_le " ident num : command
 local syntax "prim_signed_be " ident num : command
 
-local
-macro_rules
+local macro_rules
   | `(command| prim_unsigned_le $type $size) => generate_prim true true type size
   | `(command| prim_unsigned_be $type $size) => generate_prim false true type size
   | `(command| prim_signed_le $type $size) => generate_prim true false type size
   | `(command| prim_signed_be $type $size) => generate_prim false false type size
+
+public section
 
 namespace LE
 
@@ -110,5 +118,7 @@ scoped instance : Decode Float where
   get d := get (α := UInt64) d |>.map Float.ofBits
 
 end BE
+
+end
 
 end Primitive

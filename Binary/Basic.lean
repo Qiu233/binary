@@ -1,15 +1,17 @@
-import Lean
+module
+
+public section
 
 namespace Binary
 
-structure Decoder where
+public structure Decoder where
   data : ByteArray
   offset : Nat
 deriving Inhabited
 
 def Decoder.append (bytes : ByteArray) : Decoder → Decoder := fun d => {d with data := d.data.append bytes}
 
-inductive DecodeError where
+public inductive DecodeError where
   | userError (err : String)
   | eoi
 deriving Inhabited, Repr
@@ -39,7 +41,7 @@ def DecodeResult.toExcept : DecodeResult α → Except DecodeError α
   | .error err _ => .error err
   | .pending _ => .error (.userError "pending input")
 
-def Get (α : Type) : Type := Decoder → (DecodeResult α)
+abbrev Get (α : Type) : Type := Decoder → (DecodeResult α)
 
 -- @[inline]
 -- def Get.join {α} : Get (Get α) → Get α := fun xx d =>
@@ -217,9 +219,11 @@ instance [Repr α] : Repr (Literal α a) where
 instance [ToString α] : ToString (Literal α a) where
   toString x := toString x.val
 
+@[specialize]
 instance [Encode α] : Encode (Literal α a) where
   put x := Encode.put x.val
 
+@[specialize]
 instance [DecidableEq α] [Decode α] : Decode (Literal α a) where
   get := do
     let v ← Decode.get (α := α)
