@@ -42,7 +42,8 @@ def DecodeResult.toExcept : DecodeResult α → Except DecodeError α
   | .error err _ => .error err
   | .pending _ => .error (.userError "pending input")
 
-abbrev Get (α : Type) : Type := Decoder → (DecodeResult α)
+@[expose]
+def Get (α : Type) : Type := Decoder → (DecodeResult α)
 
 @[always_inline]
 def DecodeResult.feed {α} (bytes : ByteArray) : DecodeResult α → DecodeResult α
