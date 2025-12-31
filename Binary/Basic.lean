@@ -46,6 +46,9 @@ def DecodeResult.toExcept : DecodeResult α → Except DecodeError α
 def Get (α : Type) : Type := Decoder → (DecodeResult α)
 
 @[always_inline]
+def remaining : Get Nat := fun d => DecodeResult.success (d.data.size - d.offset) d
+
+@[always_inline]
 def DecodeResult.feed {α} (bytes : ByteArray) : DecodeResult α → DecodeResult α
   | .success x k => .success x (k.append bytes)
   | .error err k => .error err (k.append bytes)
