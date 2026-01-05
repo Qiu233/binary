@@ -4,7 +4,7 @@ Lean 4 package for binary data serialization and deserialization, with name `bin
 # Usage
 Add to `lakefile.lean`:
 ```
-require binary from git "https://github.com/Qiu233/binary"
+require binary from git "https://github.com/Lean-zh/binary.git"
 ```
 
 In file:
